@@ -21,22 +21,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
-
-	"cloud.google.com/go/compute/metadata"
+	"time"
 )
 
-var projectID string
-
 func main() {
-	projectID = os.Getenv("GOOGLE_CLOUD_PROJECT")
-	if projectID == "" {
-		projectID, _ = metadata.ProjectID()
-	}
-	if projectID == "" {
-		log.Println("Could not determine Google Cloud Project. Running without log correlation. For local use set the GOOGLE_CLOUD_PROJECT environment variable.")
-	}
-
 	http.HandleFunc("/", indexHandler)
 
 	// Determine port for HTTP service.
@@ -55,12 +43,41 @@ func main() {
 
 // Entry defines a log entry.
 type Entry struct {
-	Message  string `json:"message"`
-	Severity string `json:"severity,omitempty"`
-	Trace    string `json:"logging.googleapis.com/trace,omitempty"`
+	Severity       string                 `json:"severity,omitempty"`
+	Message        string                 `json:"message"`
+	HTTPRequest    HTTPRequest            `json:"httpRequest"`
+	Timestamp      time.Time              `json:"time"`
+	InsertID       string                 `json:"logging.googleapis.com/insertId"`
+	Labels         map[string]interface{} `json:"logging.googleapis.com/labels"`
+	Operation      string                 `json:"logging.googleapis.com/operation"`
+	SourceLocation SourceLocation         `json:"logging.googleapis.com/sourceLocation"`
+	SpanID         string                 `json:"logging.googleapis.com/spanId"`
+	Trace          string                 `json:"logging.googleapis.com/trace"`
+	TraceSampled   bool                   `json:"logging.googleapis.com/trace_sampled"`
+}
 
-	// Cloud Log Viewer allows filtering and display of this as `jsonPayload.component`.
-	Component string `json:"component,omitempty"`
+type HTTPRequest struct {
+	Method                         string `json:"requestMethod"`
+	URL                            string `json:"requestUrl"`
+	Size                           string `json:"requestSize"`
+	Status                         int    `json:"status"`
+	ResponseSize                   string `json:"responseSize"`
+	UserAgent                      string `json:"userAgent"`
+	RemoteIP                       string `json:"remoteIp"`
+	ServerIP                       string `json:"serverIp"`
+	Referer                        string `json:"referer"`
+	Latency                        string `json:"latency"`
+	CacheLookup                    bool   `json:"cacheLookup"`
+	CacheHit                       bool   `json:"cacheHit"`
+	CacheValidatedWithOriginServer bool   `json:"cacheValidatedWithOriginServer"`
+	CacheFillBytes                 string `json:"cacheFillBytes"`
+	Protocol                       string `json:"protocol"`
+}
+
+type SourceLocation struct {
+	File     string `json:"file"`
+	Line     string `json:"line"`
+	Function string `json:"function"`
 }
 
 // String renders an entry structure to the JSON format expected by Cloud Logging.
@@ -86,24 +103,41 @@ func init() {
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	// Uncomment and populate this variable in your code:
-	// projectID = "The project ID of your Cloud Run service"
-
-	// Derive the traceID associated with the current request.
-	var trace string
-	if projectID != "" {
-		traceHeader := r.Header.Get("X-Cloud-Trace-Context")
-		traceParts := strings.Split(traceHeader, "/")
-		if len(traceParts) > 0 && len(traceParts[0]) > 0 {
-			trace = fmt.Sprintf("projects/%s/traces/%s", projectID, traceParts[0])
-		}
-	}
-
 	log.Println(Entry{
-		Severity:  "NOTICE",
-		Message:   "This is the default display field.",
-		Component: "arbitrary-property",
-		Trace:     trace,
+		Severity: "NOTICE",
+		Message:  "This is the default display field.",
+		HTTPRequest: HTTPRequest{
+			Method:                         "POST",
+			URL:                            "https://myapi.com",
+			Size:                           "1234",
+			Status:                         200,
+			ResponseSize:                   "5678",
+			UserAgent:                      "UserAgent",
+			RemoteIP:                       "192.168.1.1",
+			ServerIP:                       "192.168.1.1",
+			Referer:                        "https://referer.com",
+			Latency:                        "3.5s",
+			CacheLookup:                    true,
+			CacheHit:                       true,
+			CacheValidatedWithOriginServer: true,
+			CacheFillBytes:                 "31415",
+			Protocol:                       "HTTP/2",
+		},
+		Timestamp: time.Date(2020, time.October, 16, 21, 22, 23, 24, time.UTC),
+		InsertID:  "123456",
+		Labels: map[string]interface{}{
+			"key1": "value",
+			"key2": "42",
+		},
+		Operation: "operation",
+		SourceLocation: SourceLocation{
+			File:     "main.go",
+			Line:     "132",
+			Function: "indexHandler",
+		},
+		SpanID:       "000000000000004a",
+		Trace:        "projects/my-projectid/traces/06796866738c859f2f19b7cfb3214824",
+		TraceSampled: true,
 	})
 
 	fmt.Fprintln(w, "Hello Logger!")

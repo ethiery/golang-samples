@@ -17,7 +17,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -27,51 +26,54 @@ import (
 
 func TestIndexHandler(t *testing.T) {
 	tests := []struct {
-		name        string
-		project     string
-		traceHeader string
-		want        string
+		name string
+		want string
 	}{
 		{
-			name:        "no project, no trace",
-			project:     "",
-			traceHeader: "",
-			want:        "",
-		},
-		{
-			name:        "no project and trace",
-			project:     "",
-			traceHeader: "123/456",
-			want:        "",
-		},
-		{
-			name:        "project and trace",
-			project:     "example",
-			traceHeader: "123/456",
-			want:        "projects/example/traces/123",
-		},
-		{
-			name:        "project and invalid trace",
-			project:     "example",
-			traceHeader: "/123",
-			want:        "",
+			name: "no project, no trace",
+			want: `{` +
+				`"severity":"NOTICE",` +
+				`"message":"This is the default display field.",` +
+				`"httpRequest":{` +
+				`"requestMethod":"POST",` +
+				`"requestUrl":"https://myapi.com",` +
+				`"requestSize":"1234",` +
+				`"status":200,` +
+				`"responseSize":"5678",` +
+				`"userAgent":"UserAgent",` +
+				`"remoteIp":"192.168.1.1",` +
+				`"serverIp":"192.168.1.1",` +
+				`"referer":"https://referer.com",` +
+				`"latency":"3.5s",` +
+				`"cacheLookup":true,` +
+				`"cacheHit":true,` +
+				`"cacheValidatedWithOriginServer":true,` +
+				`"cacheFillBytes":"31415",` +
+				`"protocol":"HTTP/2"` +
+				`},` +
+				`"time":"2020-10-16T21:22:23.000000024Z",` +
+				`"logging.googleapis.com/insertId":"123456",` +
+				`"logging.googleapis.com/labels":{"key1":"value","key2":"42"},` +
+				`"logging.googleapis.com/operation":"operation",` +
+				`"logging.googleapis.com/sourceLocation":{` +
+				`"file":"main.go",` +
+				`"line":"132",` +
+				`"function":"indexHandler"` +
+				`},` +
+				`"logging.googleapis.com/spanId":"000000000000004a",` +
+				`"logging.googleapis.com/trace":"projects/my-projectid/traces/06796866738c859f2f19b7cfb3214824",` +
+				`"logging.googleapis.com/trace_sampled":true` +
+				"}\n",
 		},
 	}
 	for _, test := range tests {
-		projectID = test.project
 		req := httptest.NewRequest("GET", "/", nil)
-		req.Header.Add("X-Cloud-Trace-Context", test.traceHeader)
 		rr := httptest.NewRecorder()
 
 		b := callHandler(indexHandler, rr, req)
 
-		var e Entry
-		if err := json.Unmarshal(b.Bytes(), &e); err != nil {
-			t.Errorf("json.Unmarshal: %v", err)
-		}
-
-		if e.Trace != test.want {
-			t.Errorf("indexHandler %q: want %q, got %q", test.name, test.want, e.Trace)
+		if b.String() != test.want {
+			t.Errorf("log entry:\nwant %s\ngot  %s", test.want, b.String())
 		}
 	}
 }
